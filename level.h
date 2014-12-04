@@ -13,5 +13,7 @@ class leveler {
   public:
     leveler(int width, int height, int maxframenum, int bitdepth); 
     void level(BMP& previousImage);
+    void doWorkAvg(BMP& curImage, BMP& previousImage);
+    void doWorkLines(BMP& curImage, BMP& previousImage);
 };
 #endif
