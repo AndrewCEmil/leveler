@@ -18,6 +18,97 @@
 using std::shared_ptr;
 using namespace std;
 
+volcano::volcano(int xpos, int ypos, int power) {
+    _xpos = xpos;
+    _ypos = ypos;
+    _power = power;
+}
+
+double volcano::getPower(int curx, int cury, int framenum) {
+    double xdist = curx - _xpos;
+    double ydist = cury - _ypos;
+    double totaldist = sqrt(xdist * xdist + ydist * ydist);
+    if(totaldist - framenum < 0) {
+        totaldist = 1;
+    } else if(totaldist == 0) {
+        return 256;
+    } else {
+        totaldist = totaldist - framenum;
+    }
+    //Distance one should always return full power
+    //Distance inf should always return 0
+    return _power / totaldist;
+
+}
+
+lava::lava(int width, int height, int maxframenum, int bitdepth) {
+    _width = width;
+    _height = height;
+    _maxframenum = maxframenum;
+    _framenum = 0;
+    _bitdepth = bitdepth;
+}
+
+void lava::init() {
+    int xpos;
+    int ypos;
+    double power;
+    volcano *v;
+    //make a bunch of volcanos
+    for(int i = 0; i < 5; i++) {
+        xpos = rand() % _width;
+        ypos = rand() % _height;
+        //between .5 and 1
+        power = .5 + fmod(((double) rand()) / (RAND_MAX), .5);
+        power += 3;
+        cout << "Xpos: " << xpos << endl;
+        cout << "Ypos: " << ypos << endl;
+        cout << "Power: " << power << endl;
+        volcanos.push_back(new volcano(xpos, ypos, power));
+    }
+    //for now, we put it in the corner
+    //volcano *v = new volcano(0,0,1);
+    //volcanos.push_back(v);
+}
+
+void lava::explode(BMP& prevImage) {
+    double powersum;
+    double newR;
+    BMP curImage;
+    char imgName[13];
+    curImage.SetSize(_width, _height);
+    curImage.SetBitDepth(_bitdepth);
+
+    for(int i = 0; i < _width; i++) {
+        for(int j = 0; j < _height; j++) {
+            powersum = 0;
+            for(int v = 0; v < volcanos.size(); v++) {
+                powersum += volcanos[v]->getPower(i, j, _framenum);
+            }
+            newR = prevImage(i,j)->Red + powersum;
+            if(newR > 255) {
+                newR = 255;
+            }
+            curImage(i, j)->Red = newR;
+            curImage(i, j)->Green = prevImage(i,j)->Green;
+            curImage(i, j)->Blue = prevImage(i,j)->Blue;
+            curImage(i, j)->Alpha = 0;
+        }
+    }
+
+    sprintf(imgName, "img%05d.bmp", _framenum);
+    curImage.WriteToFile(imgName);
+    _framenum++;
+    if(_framenum >= _maxframenum) {
+        cout << "Finished" << endl;
+        return;
+    } else {
+        cout << "Recurring" << endl;
+        explode(curImage);
+    }
+}
+
+
 leveler::leveler(int width, int height, int maxframenum, int bitdepth) {
     _width = width;
     _height = height;
@@ -160,14 +251,6 @@ void leveler::doWorkAvg(BMP& curImage, BMP& previousImage) {
             curImage(i,j)->Red = (int) newR;
             curImage(i,j)->Green = (int) newG;
             curImage(i,j)->Blue = (int) newB;
-            if(i == 0 && j == 0) {
-                cout << "Previous R: " << curR << endl;
-                cout << "AvgR: " << curSumR << endl;
-                cout << "New R: " << newR << endl;
-                cout << "adjCount: " << adjCount << endl;
-                cout << "RightR: " << previousImage.GetPixel(i + 1, j).Red << endl;
-                cout << "BottomR: " << previousImage.GetPixel(i, j + 1).Red << endl;
-            }
         }
     }
 }
@@ -178,7 +261,7 @@ void leveler::level(BMP& previousImage) {
     curImage.SetSize(_width, _height);
     curImage.SetBitDepth(_bitdepth);
 
-    doWorkLines(curImage, previousImage);
+    doWorkAvg(curImage, previousImage);
 
     sprintf(imgName, "img%05d.bmp", _framenum);
     curImage.WriteToFile(imgName);
@@ -207,18 +290,33 @@ BMP getRandomImage(int width, int height, int bitdepth, BMP &curImage) {
     return curImage;
 }
 
+BMP getBlackImage(int width, int height, int bitdepth, BMP &curImage) {
+    curImage.SetSize(width, height);
+    curImage.SetBitDepth(bitdepth);
+    for(int i = 0; i < width; i++) {
+        for(int j = 0; j < height; j++) {
+            curImage(i,j)->Red = 0;
+            curImage(i,j)->Green = 0;
+            curImage(i,j)->Blue = 0;
+            curImage(i,j)->Alpha = 0;
+        }
+    }
+    return curImage;
+}
+
 
 int main(int argc, char **argv) {
     int opt;
     double curT;
     char *inval = NULL;
     int num_threads = 8;
-    int width = 256;
-    int height = 256;
+    int width = 512;
+    int height = 512;
     int framecount = 256;
     int bitdepth = 32;
     int seed = time(NULL);
-    while ((opt = getopt(argc, argv, "w:h:f:t:b:")) != -1) {
+    BMP *curImage = new BMP();
+    while ((opt = getopt(argc, argv, "w:h:f:t:b:i:")) != -1) {
       switch (opt) {
         case 'w':
           width = atoi(optarg);
@@ -235,20 +333,23 @@ int main(int argc, char **argv) {
         case 'b':
           bitdepth = atoi(optarg);
           break;
+        case 'i':
+          curImage->ReadFromFile(optarg);
+          width = curImage->TellWidth();
+          height = curImage->TellHeight();
+          break;
         default:
           cout << "Unknown flag" << endl;
           exit(1);
       }
     }
     //TODO pull into a flag to specify
-    BMP *curImage = new BMP();
-    curImage->ReadFromFile("/Users/ace/pvid/vgen/nebula.bmp");
+    //curImage->ReadFromFile("/Users/ace/pvid/vgen/nebula.bmp");
     srand(seed);
-    //BMP curImage;
-    //getRandomImage(height, width, bitdepth, curImage);
+    getBlackImage(height, width, bitdepth, *curImage);
     //leveler *lv = new leveler(curImage, height, framecount, bitdepth);
     //lv->level(*curImage);
-    cout << "Width: " << curImage->TellWidth() << endl;
-    leveler *lv = new leveler(curImage->TellWidth(), curImage->TellHeight(), framecount, bitdepth);
-    lv->level(*curImage);
+    lava *lv = new lava(curImage->TellWidth(), curImage->TellHeight(), framecount, bitdepth);
+    lv->init();
+    lv->explode(*curImage);
 }
