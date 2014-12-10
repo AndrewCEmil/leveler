@@ -18,10 +18,17 @@
 using std::shared_ptr;
 using namespace std;
 
-volcano::volcano(int xpos, int ypos, int power) {
+pixel::pixel(int red, int green, int blue) {
+    _red = red;
+    _green = green;
+    _blue = blue;
+}
+
+volcano::volcano(int xpos, int ypos, int power, color outColor) {
     _xpos = xpos;
     _ypos = ypos;
     _power = power;
+    _outColor = outColor;
 }
 
 double volcano::getPower(int curx, int cury, int framenum) {
@@ -53,18 +60,20 @@ void lava::init() {
     int xpos;
     int ypos;
     double power;
+    color outColor;
     volcano *v;
     //make a bunch of volcanos
     for(int i = 0; i < 5; i++) {
         xpos = rand() % _width;
         ypos = rand() % _height;
+        outColor = static_cast<color>(rand() % 3);
         //between .5 and 1
         power = .5 + fmod(((double) rand()) / (RAND_MAX), .5);
         power += 3;
         cout << "Xpos: " << xpos << endl;
         cout << "Ypos: " << ypos << endl;
         cout << "Power: " << power << endl;
-        volcanos.push_back(new volcano(xpos, ypos, power));
+        volcanos.push_back(new volcano(xpos, ypos, power, outColor));
     }
     //for now, we put it in the corner
     //volcano *v = new volcano(0,0,1);
@@ -72,8 +81,7 @@ void lava::init() {
 }
 
 void lava::explode(BMP& prevImage) {
-    double powersum;
-    double newR;
+    pixel *addPixel;
     BMP curImage;
     char imgName[13];
     curImage.SetSize(_width, _height);
@@ -81,17 +89,20 @@ void lava::explode(BMP& prevImage) {
 
     for(int i = 0; i < _width; i++) {
         for(int j = 0; j < _height; j++) {
-            powersum = 0;
+            addPixel = new pixel(0, 0, 0);
             for(int v = 0; v < volcanos.size(); v++) {
-                powersum += volcanos[v]->getPower(i, j, _framenum);
+                if(volcanos[v]->_outColor == RED) {
+                    addPixel->_red += volcanos[v]->getPower(i, j, _framenum);
+                } else if(volcanos[v]->_outColor == GREEN) {
+                    addPixel->_green += volcanos[v]->getPower(i, j, _framenum);
+                } else {
+                    addPixel->_blue += volcanos[v]->getPower(i, j, _framenum);
+                }
             }
-            newR = prevImage(i,j)->Red + powersum;
-            if(newR > 255) {
-                newR = 255;
-            }
-            curImage(i, j)->Red = newR;
-            curImage(i, j)->Green = prevImage(i,j)->Green;
-            curImage(i, j)->Blue = prevImage(i,j)->Blue;
+
+            curImage(i, j)->Red = prevImage(i,j)->Red + addPixel->_red;
+            curImage(i, j)->Green = prevImage(i,j)->Green + addPixel->_green;
+            curImage(i, j)->Blue = prevImage(i,j)->Blue + addPixel->_blue;
             curImage(i, j)->Alpha = 0;
         }
     }

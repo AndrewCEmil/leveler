@@ -6,6 +6,16 @@
 
 using namespace std;
 
+enum color { RED, GREEN, BLUE };
+
+class pixel {
+  public:
+    pixel(int red, int green, int blue);
+    int _red;
+    int _green;
+    int _blue;
+};
+
 class leveler {
   private:
     int _width;
@@ -26,8 +36,9 @@ class volcano {
     int _ypos;
     double _power;
   public:
-    volcano(int xpos, int ypos, int power);
+    volcano(int xpos, int ypos, int power, color outColor);
     double getPower(int curx, int cury, int framenum);
+    color _outColor;
 };
 
 class lava {
